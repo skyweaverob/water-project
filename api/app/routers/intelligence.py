@@ -15,7 +15,8 @@ from app.agents.supplier_discovery import discover_suppliers
 from app.auth import resolve_tenant
 from app.db import get_session
 from app.models import Tenant
-from app.services import public_signals
+from app.services import eia, public_signals
+from app.services.eia import SERIES as EIA_SERIES
 from app.services.price_resolver import resolve_price
 from app.services.public_signals import FRED_PPI
 
@@ -156,3 +157,16 @@ async def edgar(days: int = 30) -> list[dict]:
 @router.get("/signals/news")
 async def gdelt(query: str, hours: int = 24) -> list[dict]:
     return await public_signals.gdelt_news(query, hours=hours)
+
+
+@router.get("/signals/eia/series")
+async def eia_series_catalog() -> dict[str, str]:
+    """Catalog of EIA series wired into the platform (Henry Hub gas, WTI crude, refinery
+    utilization, electricity price). Use the keys with /signals/eia/{series_id}."""
+    return EIA_SERIES
+
+
+@router.get("/signals/eia/{series_id}")
+async def eia_series(series_id: str, length: int = 365) -> list[dict]:
+    pts = await eia.fetch_series(series_id, length=length)
+    return [{"period": p.period, "value": p.value} for p in pts]

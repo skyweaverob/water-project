@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Literal
 
 from app.agents.price_discovery import discover_price
-from app.services import intratec, public_signals
+from app.services import businessanalytiq, intratec, public_signals
 
 PRIORS_PATH = Path(__file__).parent.parent / "intelligence" / "chemical_priors.json"
 _PRIORS = {c["name"].lower(): c for c in json.loads(PRIORS_PATH.read_text(encoding="utf-8"))["chemicals"]}
@@ -42,7 +42,7 @@ FRED_FOR_CHEMICAL: dict[str, str] = {
 }
 
 
-SourceTier = Literal["intratec", "fred", "search", "prior", "none"]
+SourceTier = Literal["intratec", "businessanalytiq", "fred", "search", "prior", "none"]
 
 
 @dataclass
@@ -73,7 +73,21 @@ async def resolve_price(chemical_name: str, *, region: str | None = "USA") -> Pr
             citations=[{"source": "intratec", "commodity": latest.commodity_slug, "period": latest.period}],
         )
 
-    # Tier 2: FRED — returns an *index*, not absolute $/kg. We mark it as an index quote
+    # Tier 2: businessanalytiq free public index (when opted-in)
+    ba = await businessanalytiq.get_price(chemical_name)
+    if ba and ba.usd_per_kg is not None:
+        return PriceQuote(
+            chemical=chemical_name,
+            source="businessanalytiq",
+            usd_per_kg_active=ba.usd_per_kg,
+            confidence=0.65,
+            as_of=ba.period,
+            region=ba.region,
+            note=f"businessanalytiq {ba.slug} index (free public source; layout-fragile)",
+            citations=[{"source": "businessanalytiq", "url": ba.url, "period": ba.period}],
+        )
+
+    # Tier 3: FRED — returns an *index*, not absolute $/kg. We mark it as an index quote
     # so the bid evaluator UI can render it as "PPI: 212 (index, not $/kg)" rather than
     # falsely claiming a price.
     series_id = FRED_FOR_CHEMICAL.get(chemical_name)

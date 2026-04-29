@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     intratec_api_url: str = ""
     intratec_csv_dir: str = ""
 
+    # EIA Open Data API — free with key from https://www.eia.gov/opendata/
+    eia_api_key: str = ""
+
+    # businessanalytiq.com free index scraper — opt-in (off | on)
+    businessanalytiq_mode: str = "off"
+
     epa_corpus_dir: str = "./corpus"
 
     cors_origins: str = "http://localhost:3000"
