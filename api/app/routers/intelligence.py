@@ -16,6 +16,7 @@ from app.auth import resolve_tenant
 from app.db import get_session
 from app.models import Tenant
 from app.services import public_signals
+from app.services.price_resolver import resolve_price
 from app.services.public_signals import FRED_PPI
 
 
@@ -40,6 +41,8 @@ async def get_price(
     region: str | None = None,
     tenant: Tenant = Depends(resolve_tenant),
 ) -> PriceBenchmarkOut:
+    """Deep search-driven benchmark (slow but thorough). For the fast `/price-resolver`
+    endpoint that picks the highest-quality available source, see `/price-resolver/...`."""
     benchmark = await discover_price(chemical_name, region=region)
     return PriceBenchmarkOut(
         chemical=benchmark.chemical,
@@ -51,6 +54,39 @@ async def get_price(
         points=[asdict(p) for p in benchmark.points],
         queries_used=benchmark.queries_used,
         methodology_note=benchmark.methodology_note,
+    )
+
+
+class PriceResolveOut(BaseModel):
+    chemical: str
+    source: str            # intratec | fred | search | prior | none
+    usd_per_kg_active: float | None
+    confidence: float
+    as_of: str | None
+    region: str | None
+    note: str | None
+    citations: list[dict]
+
+
+@router.get("/price-resolver/{chemical_name}", response_model=PriceResolveOut)
+async def get_price_resolved(
+    chemical_name: str,
+    region: str = "USA",
+    tenant: Tenant = Depends(resolve_tenant),
+) -> PriceResolveOut:
+    """Best-available price for a chemical. Tries Intratec → FRED → search → static prior.
+    Returns one row tagged with the source so the UI can show buyers which numbers are
+    authoritative ($/kg from Intratec) vs. derived (FRED index) vs. inferred (search agent)."""
+    quote = await resolve_price(chemical_name, region=region)
+    return PriceResolveOut(
+        chemical=quote.chemical,
+        source=quote.source,
+        usd_per_kg_active=quote.usd_per_kg_active,
+        confidence=quote.confidence,
+        as_of=quote.as_of,
+        region=quote.region,
+        note=quote.note,
+        citations=quote.citations,
     )
 
 

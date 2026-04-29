@@ -71,6 +71,21 @@ SEARCH_API_KEY=...
 The platform never hard-codes credentials. Provider-specific request shapes are normalized in
 [api/app/services/search.py](api/app/services/search.py).
 
+### Price-source resolver
+
+For each chemical, the platform picks the highest-quality available source and falls
+through cleanly. Configured in [api/app/services/price_resolver.py](api/app/services/price_resolver.py):
+
+| Tier | Source | Configure | Confidence | Output |
+|---|---|---|---|---|
+| 1 | **Intratec Primary Commodity Prices** | `INTRATEC_MODE=api`, `INTRATEC_API_KEY=...` ($699/yr Advanced tier) — or `INTRATEC_MODE=csv`, `INTRATEC_CSV_DIR=...` ($299/yr Starter tier) | 0.95 | $/kg active, monthly |
+| 2 | **FRED PPI series** | always-on, no key | 0.7 | index value (not absolute) |
+| 3 | **Search-API price discovery** | reuses `SEARCH_API_KEY` | 0.6 | $/kg active, sourced from utility RFP awards & trade press |
+| 4 | **Static EPA prior** | always-on | 0.3 | family + risk band only |
+
+The Bid Evaluator's market-benchmark column tags each row with the source so buyers see
+which prices are authoritative (Intratec) vs derived (FRED) vs inferred (search agent).
+
 ### Public-data signal sources
 
 In addition to the search API, the Risk Monitor pulls from free authoritative feeds (no key

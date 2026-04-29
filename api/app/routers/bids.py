@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from app.agents.bid_extraction import extract_bid, parse_bid_pdf
 from app.agents.price_discovery import discover_price
 from app.auth import resolve_tenant
+from app.services.price_resolver import resolve_price
 from app.db import get_session
 from app.models import Bid, BidLineItem, Chemical, FacilityProfile, Rfp, Tenant
 from app.services.bid_evaluator import BidExtract, BidLine, evaluate_bids, render_memo_pdf
@@ -251,8 +252,12 @@ async def evaluate_rfp_bids(
 
 class MarketBenchmarkOut(BaseModel):
     chemical: str
-    median_usd_per_kg_active: float
+    median_usd_per_kg_active: float | None
     sample_size: int
+    source: str            # intratec | fred | search | prior | none
+    confidence: float
+    as_of: str | None
+    note: str | None
 
 
 @router.get("/by-rfp/{rfp_id}/market-benchmark", response_model=MarketBenchmarkOut)
@@ -261,20 +266,25 @@ async def market_benchmark(
     tenant: Tenant = Depends(resolve_tenant),
     session: AsyncSession = Depends(get_session),
 ) -> MarketBenchmarkOut:
-    """Live web-search-driven price benchmark for the RFP's chemical. The Bid Evaluator UI
-    renders this as a column next to each supplier's normalized price so the buyer
-    immediately sees who is above / below market."""
+    """Best-available market benchmark for the RFP's chemical. Picks the highest-quality
+    source: Intratec API (when subscribed) → FRED PPI index → search-agent discovery.
+    The UI shows the source tag so buyers see which prices are authoritative."""
     rfp = await session.get(Rfp, rfp_id)
     if not rfp or rfp.tenant_id != tenant.id:
         raise HTTPException(404, "RFP not found")
     chem = await session.get(Chemical, rfp.chemical_id)
     if not chem:
         raise HTTPException(404, "Chemical not found")
-    benchmark = await discover_price(chem.name, cas_number=chem.cas_number)
+
+    quote = await resolve_price(chem.name)
     return MarketBenchmarkOut(
         chemical=chem.name,
-        median_usd_per_kg_active=benchmark.median_usd_per_kg,
-        sample_size=benchmark.sample_size,
+        median_usd_per_kg_active=quote.usd_per_kg_active,
+        sample_size=len(quote.citations),
+        source=quote.source,
+        confidence=quote.confidence,
+        as_of=quote.as_of,
+        note=quote.note,
     )
 
 

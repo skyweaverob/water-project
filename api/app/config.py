@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     search_provider: str = "brave"        # brave | tavily | exa | serpapi
     search_api_key: str = ""
 
+    # Intratec Primary Commodity Prices — cheap commercial price source ($299-699/yr).
+    # Mode "off" = adapter is a no-op; "api" = REST (Advanced tier); "csv" = parse CSV
+    # exports dropped into INTRATEC_CSV_DIR (Starter/Pro tier).
+    intratec_mode: str = "off"
+    intratec_api_key: str = ""
+    intratec_api_url: str = ""
+    intratec_csv_dir: str = ""
+
     epa_corpus_dir: str = "./corpus"
 
     cors_origins: str = "http://localhost:3000"
