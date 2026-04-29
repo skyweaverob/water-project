@@ -1,0 +1,340 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-04-28",
+  "description": "Price-discovery sources for water treatment chemical procurement, derived from full read of all 46 EPA Water Treatment Chemical Supply Chain Profiles. Each source notes coverage, access, and the chemicals it informs. Used by the Risk Monitor and Bid Evaluator to ground price-adjusted scoring in defensible public data.",
+  "tiers": {
+    "tier_1_government_free": "First-call sources for any procurement decision. Free, authoritative, no licensing risk.",
+    "tier_2_industry_free": "Trade associations and producer disclosures. Free but require parsing.",
+    "tier_3_paid_commercial": "Subscription required. Add when defensibility or recency demands it."
+  },
+  "sources": [
+    {
+      "id": "usitc_dataweb",
+      "name": "USITC DataWeb",
+      "url": "https://dataweb.usitc.gov/",
+      "tier": "tier_1_government_free",
+      "access": "Free with registration",
+      "provides": ["import_volumes_kg", "import_values_usd", "export_volumes_kg", "export_values_usd", "country_of_origin", "monthly_granularity"],
+      "covers_hts_codes": "all",
+      "covers_chemicals": "all_traded",
+      "implied_unit_price": "import_value_usd / import_volume_kg gives landed-unit-price proxy by HTS x partner",
+      "notes": "Foundation source — every chemical has trade data here. Limitation: HTS codes are often broader than the chemical (e.g., 2828.90 lumps NaOCl/Ca(OCl)2/NaClO2)."
+    },
+    {
+      "id": "usitc_hts_search",
+      "name": "USITC Harmonized Tariff Schedule Search",
+      "url": "https://hts.usitc.gov/",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["general_duty_pct", "section_301_china_duty_pct", "antidumping_orders", "countervailing_duty_orders", "fta_preference_programs"],
+      "covers_chemicals": "all",
+      "notes": "Critical for landed-cost. China Section 301 (25%) is universal across this corpus. Watch antidumping cliffs: Calcium Hypochlorite from China +65.85% CVD; Potassium Permanganate from China +128.94% AD."
+    },
+    {
+      "id": "wits_world_bank",
+      "name": "WITS — World Integrated Trade Solution",
+      "url": "https://wits.worldbank.org/",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["worldwide_trade_volumes_hs6", "top_5_exporters", "top_5_importers", "country_pair_flows"],
+      "covers_chemicals": "all_traded",
+      "notes": "Use to identify global price arbitrage and substitute-source countries when primary import partner becomes constrained."
+    },
+    {
+      "id": "epa_tsca_cdr",
+      "name": "EPA TSCA Chemical Data Reporting",
+      "url": "https://www.epa.gov/chemical-data-reporting",
+      "tier": "tier_1_government_free",
+      "access": "Free (CBI-redacted)",
+      "provides": ["domestic_production_kg", "manufacturer_identities", "site_locations", "industrial_use_categories"],
+      "covers_chemicals": "all_with_cas",
+      "cycle": "quadrennial (2016, 2020, next 2024)",
+      "notes": "Heavy CBI redaction limits utility for organics (citric acid, acrylamide, DADMAC, calcium hypochlorite). Mineral commodities go to USGS instead."
+    },
+    {
+      "id": "usgs_mcs",
+      "name": "USGS Mineral Commodity Summaries",
+      "url": "https://pubs.usgs.gov/periodicals/mcs/",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["annual_production", "annual_consumption", "import_reliance_pct", "average_unit_value_usd_per_ton", "named_producers", "country_rankings"],
+      "covers_chemicals": ["bauxite", "lime (CaO/Ca(OH)2)", "limestone (CaCO3)", "soda ash", "salt (NaCl)", "potash (KCl)", "phosphate rock", "sulfur", "silica", "manganese", "zinc", "fluorspar (precursor to FSA)", "ilmenite/titanium"],
+      "notes": "Best free pricing source for mined inputs. Annual unit values ($/ton) are usable directly as procurement benchmarks."
+    },
+    {
+      "id": "usgs_minerals_yearbook",
+      "name": "USGS Minerals Yearbook",
+      "url": "https://www.usgs.gov/centers/national-minerals-information-center/minerals-yearbook-metals-and-minerals",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["detailed_annual_production_tables", "facility_lists", "consumption_by_end_use"],
+      "covers_chemicals": "same as MCS but with deeper history and breakdowns",
+      "notes": "Use when MCS is too summary; cited heavily in EPA profiles for bauxite, lime, soda ash, salt, sulfur, manganese, zinc."
+    },
+    {
+      "id": "usitc_publications",
+      "name": "USITC Investigation Publications",
+      "url": "https://www.usitc.gov/publications",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["antidumping_investigations", "countervailing_investigations", "named_producer_capacity", "transactional_pricing"],
+      "covers_chemicals": ["calcium hypochlorite (Pub 4515, 5065)", "potassium permanganate (Pub 5241)", "sodium hexametaphosphate (Pub 4840)", "phosphate salts (Pub 4110)", "sulfur dioxide (Pub 3826)", "citric acid (Pub 4538, 4710)"],
+      "notes": "Antidumping reports contain rare disclosed transaction prices and producer capacity figures."
+    },
+    {
+      "id": "nsf_certified_suppliers",
+      "name": "NSF International — NSF/ANSI Standard 60 Certified Suppliers",
+      "url": "https://info.nsf.org/Certified/PwsChemicals/",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["qualified_supplier_directory_for_drinking_water"],
+      "covers_chemicals": "all drinking-water-grade chemicals",
+      "notes": "The single most important supplier-pool depth signal. NSF60-certified count varies dramatically (PAC: 140, sodium hydroxide: 224, ferrous sulfate: 5, calcium hypochlorite: 14). Use as the gating criterion for any drinking-water RFP supplier shortlist."
+    },
+    {
+      "id": "epa_chemical_locator",
+      "name": "EPA Chemical Suppliers and Manufacturers Locator Tool",
+      "url": "https://www.epa.gov/waterutilityresponse/chemical-suppliers-and-manufacturers-locator-tool",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["geo_located_suppliers", "geo_located_manufacturers"],
+      "covers_chemicals": "water_treatment_chemicals",
+      "notes": "Companion to NSF60. Geographic distance to nearest supplier is a freight-cost proxy and resilience signal."
+    },
+    {
+      "id": "federal_register",
+      "name": "Federal Register — Antidumping & Countervailing Duty Orders",
+      "url": "https://www.federalregister.gov/",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["live_duty_orders", "duty_review_schedules"],
+      "covers_chemicals": "any subject to AD/CVD",
+      "notes": "Watch for new orders that change landed-cost overnight. Set alerts on chemical-specific docket numbers."
+    },
+    {
+      "id": "eia_natural_gas",
+      "name": "EIA — Henry Hub Natural Gas Spot Price",
+      "url": "https://www.eia.gov/dnav/ng/hist/rngwhhdM.htm",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["weekly_natural_gas_spot_price"],
+      "drives_pricing_for": ["anhydrous ammonia", "ammonium hydroxide", "chloramines (downstream)"],
+      "notes": "Not cited in EPA profiles but is THE upstream driver for ammonia. ~75-80% of global ammonia is steam-methane reformed; gas is ~70% of variable cost."
+    },
+    {
+      "id": "eia_petroleum",
+      "name": "EIA — WTI Crude and Refinery Throughput",
+      "url": "https://www.eia.gov/petroleum/",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["crude_prices", "refinery_utilization", "propylene_byproduct_indicators"],
+      "drives_pricing_for": ["sulfur (refinery byproduct)", "sulfur dioxide", "sulfuric acid", "acrylamide (acrylonitrile feedstock)", "DADMAC (allyl chloride feedstock)"],
+      "notes": "Refinery utilization is inverse to sulfur availability — when refineries idle, sulfur tightens."
+    },
+    {
+      "id": "bls_ppi",
+      "name": "BLS Producer Price Index — Industrial Chemicals",
+      "url": "https://www.bls.gov/ppi/",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["monthly_ppi_series_by_naics"],
+      "key_series": {
+        "WPU0613": "Industrial chemicals composite",
+        "WPU06130204": "Chlorine",
+        "WPU0613020X": "Caustic soda (NaOH)",
+        "PCU325180325180": "Other basic inorganic chemical manufacturing"
+      },
+      "notes": "Not cited in EPA profiles but standard for spot-price escalation and contract index clauses. Use as price-adjustment index in long-term RFP boilerplate."
+    },
+    {
+      "id": "chlorine_institute",
+      "name": "The Chlorine Institute — Production & Shipment Reports, Pamphlets",
+      "url": "https://www.chlorineinstitute.org/",
+      "tier": "tier_2_industry_free",
+      "access": "Most pamphlets free; quarterly production data subscription/member",
+      "provides": ["chlorine_production_qa", "naoh_production_qa", "naocl_production_qa", "chlor_alkali_capacity"],
+      "key_publications": ["Pamphlet 1", "Pamphlet 10 (N. American Chlor-Alkali Plants & Production)", "Annual Production & Shipment Report"],
+      "covers_chemicals": ["chlorine", "sodium hydroxide", "sodium hypochlorite", "calcium hypochlorite (indirectly)"],
+      "notes": "The only granular source for chlorine production figures (10,000 M kg in 2019). Critical for chlor-alkali family pricing."
+    },
+    {
+      "id": "awwa_standards",
+      "name": "AWWA B-Series Water Treatment Chemical Standards",
+      "url": "https://www.awwa.org/store",
+      "tier": "tier_3_paid_commercial",
+      "access": "Paid (per-standard purchase or membership)",
+      "provides": ["product_specifications", "purity_thresholds", "qa_qc_requirements"],
+      "key_standards": {
+        "B200": "Sodium chloride",
+        "B201": "Soda ash",
+        "B300": "Hypochlorites",
+        "B301": "Liquid chlorine",
+        "B303": "Sodium chlorite / Sodium silicate",
+        "B304": "Liquid oxygen",
+        "B305": "Anhydrous ammonia",
+        "B306": "Aqua ammonia",
+        "B402": "Ferrous sulfate",
+        "B403": "Aluminum sulfate",
+        "B406": "Ferric sulfate",
+        "B407": "Liquid ferric chloride",
+        "B408": "Polyaluminum chloride",
+        "B501": "Sodium hydroxide",
+        "B502": "Sodium polyphosphate",
+        "B503": "SHMP",
+        "B504": "MSP/DSP",
+        "B506": "Zinc orthophosphate",
+        "B507": "Phosphoric acid",
+        "B510": "Carbon dioxide",
+        "B511": "Potassium hydroxide",
+        "B512": "Sulfur dioxide",
+        "B603": "Potassium permanganate",
+        "B703": "Fluorosilicic acid"
+      },
+      "notes": "Spec compliance gate. RFP technical specs should reference these directly."
+    },
+    {
+      "id": "icis",
+      "name": "ICIS (Independent Commodity Intelligence Services)",
+      "url": "https://www.icis.com/",
+      "tier": "tier_3_paid_commercial",
+      "access": "Subscription",
+      "provides": ["weekly_spot_prices", "contract_prices", "regional_arbitrage"],
+      "covers_chemicals": ["chlorine", "caustic soda", "hydrochloric acid", "sulfuric acid", "phosphoric acid", "ammonia", "hydrogen peroxide", "ferric chloride", "polymers"],
+      "notes": "Cited in HCl profile (Bowen 2020). Industry-standard for forward-curve pricing."
+    },
+    {
+      "id": "sp_global_commodity_insights",
+      "name": "S&P Global Commodity Insights (formerly Platts)",
+      "url": "https://www.spglobal.com/commodityinsights",
+      "tier": "tier_3_paid_commercial",
+      "access": "Subscription",
+      "provides": ["daily_price_assessments", "contract_indices"],
+      "covers_chemicals": ["sulfur", "phosphate rock", "phosphoric acid", "ammonia", "caustic soda", "chlorine"],
+      "notes": "Standard for fertilizer-overlap chemicals where ag pricing dominates."
+    },
+    {
+      "id": "argus_media",
+      "name": "Argus Media",
+      "url": "https://www.argusmedia.com/",
+      "tier": "tier_3_paid_commercial",
+      "access": "Subscription",
+      "provides": ["sulfur_phosphate_potash_ammonia_indices"],
+      "notes": "Strong on fertilizer chain — useful for phosphate/sulfur derivatives."
+    },
+    {
+      "id": "chemical_market_analytics",
+      "name": "Chemical Market Analytics (formerly IHS Markit chemical)",
+      "url": "https://chemical.markit.com/",
+      "tier": "tier_3_paid_commercial",
+      "access": "Subscription",
+      "provides": ["chlor_alkali_supply_demand", "long_term_forecasts"],
+      "covers_chemicals": ["chlorine", "caustic soda", "PVC chain", "downstream HCl"],
+      "notes": "Cited in NaOH profile (Kreuz 2022). Best forward-looking supply-demand model for chlor-alkali."
+    },
+    {
+      "id": "cen_acs",
+      "name": "Chemical & Engineering News (C&EN)",
+      "url": "https://cen.acs.org/",
+      "tier": "tier_2_industry_free",
+      "access": "Mix of free / paywalled",
+      "provides": ["qualitative_market_commentary"],
+      "covers_chemicals": "broad",
+      "notes": "Cited multiple times (Tullo 2021 Gulf Coast force majeure; Boerner 2019 ammonia energy; McCoy 2008 acid pricing)."
+    },
+    {
+      "id": "world_bank_pink_sheet",
+      "name": "World Bank Commodity Markets Outlook (Pink Sheet)",
+      "url": "https://www.worldbank.org/en/research/commodity-markets",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["monthly_commodity_price_data", "forecasts"],
+      "covers_chemicals": ["potash", "phosphate rock", "urea", "DAP"],
+      "notes": "Cited via Baffes & Koh 2022 — flagged 178% potash price increase Apr 2021–Apr 2022."
+    },
+    {
+      "id": "imni",
+      "name": "International Manganese Institute (IMnI)",
+      "url": "https://www.manganese.org/",
+      "tier": "tier_2_industry_free",
+      "access": "Free annual review",
+      "provides": ["manganese_production_share_by_country"],
+      "covers_chemicals": ["manganese (KMnO4 precursor)"]
+    },
+    {
+      "id": "gasworld",
+      "name": "gasworld trade publication",
+      "url": "https://www.gasworld.com/",
+      "tier": "tier_2_industry_free",
+      "access": "Free articles, paid subscription for premium",
+      "provides": ["industrial_gas_capacity", "market_commentary"],
+      "covers_chemicals": ["oxygen", "carbon dioxide"]
+    },
+    {
+      "id": "noaa_weather",
+      "name": "NOAA Storm Prediction & Hurricane Tracking",
+      "url": "https://www.noaa.gov/",
+      "tier": "tier_1_government_free",
+      "access": "Free APIs",
+      "provides": ["hurricane_forecast", "winter_storm_watches", "gulf_coast_tracking"],
+      "drives_pricing_for": ["all Gulf Coast chlor-alkali", "all polymer precursors", "sulfur"],
+      "notes": "Winter Storm Uri (Feb 2021) caused 28% chlor-alkali capacity loss. Hurricane Ida (Aug 2021) idled Gulf Coast acrylonitrile/allyl chloride. Use NOAA APIs in Risk Monitor as a leading indicator."
+    },
+    {
+      "id": "company_disclosures_10k",
+      "name": "Producer Annual Reports & 10-K filings",
+      "url": "https://www.sec.gov/edgar/searchedgar/companysearch.html",
+      "tier": "tier_1_government_free",
+      "access": "Free via SEC EDGAR for public producers",
+      "provides": ["capacity_disclosures", "pricing_commentary", "force_majeure_disclosures"],
+      "key_producers": ["Olin", "Westlake", "Mosaic", "ICL", "Innophos", "PQ/Ecovyst", "Linde", "Air Products", "CF Industries", "Intrepid Potash", "Formosa Plastics"],
+      "notes": "10-K MD&A sections often include explicit pricing trend commentary."
+    },
+    {
+      "id": "ftc_decisions",
+      "name": "FTC Antitrust Decisions and Consent Orders",
+      "url": "https://www.ftc.gov/legal-library",
+      "tier": "tier_1_government_free",
+      "access": "Free",
+      "provides": ["market_structure", "geographic_shipping_economics", "concentration_data"],
+      "examples": ["Linde-Praxair (2018)", "Superior Plus / Canexus (2016)", "Evonik / PeroxyChem (2019)", "Occidental / Vulcan (2005)", "Air Liquide (2004)"],
+      "notes": "Reveal hard truths about merchant vs. captive splits and geographic shipping economics (e.g., 250-300 mile economic truck radius for sodium hypochlorite)."
+    }
+  ],
+  "discovery_strategies_by_chemical_type": {
+    "mined_minerals": {
+      "chemicals": ["bauxite", "phosphate rock", "potash (KCl)", "salt (NaCl)", "limestone", "sulfur", "silica", "manganese", "zinc", "ilmenite", "fluorspar"],
+      "primary_sources": ["usgs_mcs", "usgs_minerals_yearbook", "world_bank_pink_sheet", "wits_world_bank"],
+      "rationale": "USGS publishes named-producer unit values for free; commodity minerals are price-discovered globally."
+    },
+    "chlor_alkali_family": {
+      "chemicals": ["chlorine", "sodium hydroxide", "hydrochloric acid", "sodium hypochlorite", "calcium hypochlorite", "sodium chlorate", "sodium chlorite", "ferric chloride", "ferrous chloride", "polyaluminum chloride"],
+      "primary_sources": ["chlorine_institute", "chemical_market_analytics", "icis", "noaa_weather", "ftc_decisions"],
+      "rationale": "Co-production stoichiometry binds prices; chlorine demand is fundamentally captive (PVC); Gulf Coast weather risk dominates."
+    },
+    "petrochem_polymers": {
+      "chemicals": ["acrylamide", "DADMAC", "polyacrylamide", "polyDADMAC"],
+      "primary_sources": ["eia_petroleum", "icis", "cen_acs", "noaa_weather"],
+      "rationale": "Acrylonitrile and allyl chloride are propylene derivatives; SNF Holding dominates supply; Gulf Coast force majeure recurrent."
+    },
+    "ammonia_chain": {
+      "chemicals": ["anhydrous ammonia", "ammonium hydroxide"],
+      "primary_sources": ["eia_natural_gas", "argus_media", "world_bank_pink_sheet", "company_disclosures_10k"],
+      "rationale": "Henry Hub gas drives 70% of variable cost. Geopolitical exposure (Russia, Trinidad) tracked through trade flows."
+    },
+    "phosphate_chain": {
+      "chemicals": ["phosphate rock", "phosphoric acid", "MSP", "DSP", "STPP", "SHMP", "zinc orthophosphate", "fluorosilicic acid"],
+      "primary_sources": ["argus_media", "sp_global_commodity_insights", "usgs_mcs", "usitc_publications"],
+      "rationale": "~95% of phosphate rock is captive for fertilizer; non-fertilizer water-grade derivatives ride fertilizer cycle. Antidumping cases on Chinese phosphates create cliffs."
+    },
+    "industrial_gases": {
+      "chemicals": ["oxygen", "carbon dioxide"],
+      "primary_sources": ["gasworld", "company_disclosures_10k", "ftc_decisions"],
+      "rationale": "Local pipeline / cylinder / cryo-trailer distribution dominates; international trade is minimal; Big 4 (Linde, Air Liquide/Praxair, Air Products, Matheson) set merchant prices."
+    },
+    "specialty_organics": {
+      "chemicals": ["citric acid"],
+      "primary_sources": ["usitc_dataweb", "wits_world_bank", "icis"],
+      "rationale": "Heavily import-dependent (China dominates global supply); CBI hides domestic production figures."
+    }
+  }
+}

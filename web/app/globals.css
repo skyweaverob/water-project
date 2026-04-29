@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    font-feature-settings: "cv11", "ss03", "cv02";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-white text-ink font-sans text-body antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: rgba(0, 113, 227, 0.15);
+  }
+
+  /* Tabular numerals globally — column alignment on every number */
+  .num,
+  table,
+  td,
+  th,
+  output,
+  data {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Remove default focus rings; we provide our own */
+  :focus {
+    outline: none;
+  }
+
+  /* Quiet, purposeful focus ring */
+  :focus-visible {
+    outline: 2px solid rgb(0 113 227 / 0.5);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Strip default styles from form elements */
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  /* Frosted-glass nav surface */
+  .nav-surface {
+    background-color: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgb(245 245 247);
+  }
+}

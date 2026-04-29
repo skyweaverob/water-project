@@ -1,0 +1,43 @@
+[project]
+name = "procurement-api"
+version = "0.1.0"
+description = "Buy-side chemical procurement intelligence backend"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "asyncpg>=0.29",
+  "sqlalchemy[asyncio]>=2.0",
+  "alembic>=1.13",
+  "pgvector>=0.3",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.3",
+  "anthropic>=0.40",
+  "voyageai>=0.2",
+  "pdfplumber>=0.11",
+  "pypdf>=4.3",
+  "python-docx>=1.1",
+  "reportlab>=4.2",
+  "arq>=0.26",
+  "httpx>=0.27",
+  "stripe>=10.0",
+  "python-multipart>=0.0.9",
+  "tenacity>=9.0",
+  "structlog>=24.1",
+  "PyJWT>=2.8",
+  "cryptography>=43.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "ruff>=0.5"
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
