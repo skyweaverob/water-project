@@ -13,22 +13,21 @@ adding chemicals, and configuring vertical (municipal vs. industrial) behavior.
 ## Architecture
 
 ```
-┌──────────────────────┐         ┌────────────────────────┐
-│  web (Next.js 14)    │ ──────▶ │  api (FastAPI)         │
-│  app/, components/   │         │  routers, agents,      │
-│  styles/tokens.ts    │         │  services, intelligence│
-└──────────────────────┘         └─────────┬──────────────┘
-                                           │
-                       ┌───────────────────┼───────────────────┐
-                       │                   │                   │
-                ┌──────▼──────┐    ┌───────▼────────┐  ┌──────▼─────────┐
-                │  postgres   │    │  redis (Arq)   │  │  search API    │
-                │  + pgvector │    │  worker queue  │  │  Brave/Tavily/ │
-                └─────────────┘    └────────────────┘  │  Exa/SerpAPI   │
-                                                       └────────────────┘
+┌──────────────────────┐        ┌────────────────────────┐
+│  web (Next.js 14)    │ ──────▶│  api (FastAPI)         │
+│                      │        │  routers + agents +    │
+│                      │        │  in-process scheduler  │
+└──────────────────────┘        └────────┬───────────────┘
+                                         │
+                                ┌────────▼────────┐
+                                │  Postgres +     │
+                                │  pgvector       │
+                                └─────────────────┘
 ```
 
-Five Railway services: `api`, `worker`, `web`, `postgres`, `redis`.
+**Two services + one Postgres.** The api process runs the scheduler in-process
+(asyncio tasks for daily risk refresh, weekly price refresh, quarterly board report) —
+no Redis or worker container needed.
 
 ### Module map
 
@@ -37,7 +36,7 @@ Five Railway services: `api`, `worker`, `web`, `postgres`, `redis`.
 | Knowledge base ingestion | `ingestion/run.py` | — | Phase 1, run once |
 | RFP Builder | `/rfps`, `/rfps/{id}/document` | `/rfps`, `/rfps/new` | Generates DOCX |
 | Bid Evaluator | `/bids`, `/bids/by-rfp/{id}/evaluate`, `.../memo`, `.../market-benchmark` | `/bids` | Generates PDF memo, live price benchmark |
-| Risk Monitor | `/risk/portfolio`, `/risk/timeseries`, `/risk/alerts` | `/risk` | Daily worker scans live web |
+| Risk Monitor | `/risk/portfolio`, `/risk/timeseries`, `/risk/alerts` | `/risk` | Daily in-process scheduler scans live web |
 | Knowledge Q&A | `/knowledge/ask` (NDJSON stream) | `/knowledge` | RAG over EPA fact sheets |
 | Intelligence | `/intelligence/price/{name}`, `/suppliers/{name}`, `/disruptions/{name}`, `/signals/...` | embedded | Search-powered agents |
 | Design system | — | `/design` | Reference page for every component |
@@ -116,8 +115,8 @@ required) — see [api/app/services/public_signals.py](api/app/services/public_s
 cp .env.example .env
 # fill in: ANTHROPIC_API_KEY, VOYAGE_API_KEY, SEARCH_API_KEY, CLERK keys, STRIPE keys
 
-# 2. Bring up postgres + redis
-docker compose up -d postgres redis
+# 2. Bring up postgres
+docker compose up -d postgres
 
 # 3. Provision schema (creates pgvector extension + all tables)
 cd api
@@ -131,10 +130,7 @@ EPA_CORPUS_DIR=/abs/path/to/corpus python -m ingestion.run
 # 5. Start the API
 uvicorn app.main:app --reload --port 8000
 
-# 6. In another shell, start the worker (Arq)
-arq app.worker.WorkerSettings
-
-# 7. In another shell, start the web app
+# 6. In another shell, start the web app
 cd ../web
 npm install
 npm run dev
@@ -212,25 +208,24 @@ or `vertical = industrial`. The configuration affects:
 - Award memo format — municipal memos address a procurement committee in plant-superintendent
   voice; industrial memos address corporate procurement and ESG committees.
 - Reporting conventions — quarterly board PDFs use AWWA-style language for municipal, ESG
-  rollup language for industrial (planned in `worker.quarterly_board_report`).
+  rollup language for industrial (planned in `scheduler.quarterly_board_report`).
 
 To customize further, populate the `vertical_config` table with terminology overrides and
 report-template IDs.
 
 ---
 
-## Deploying to Railway
+## Deploying
 
-See [RAILWAY.md](RAILWAY.md) for the full step-by-step. Critical points:
+See **[DEPLOY.md](DEPLOY.md)** for the full step-by-step. The short version:
 
-- Use the `pgvector/pgvector:pg16` Docker image for Postgres — Railway's stock Postgres
-  template doesn't include the `vector` extension binary.
-- The api service's entrypoint runs `python -m app.scripts.create_all` on every boot, so
-  the schema is provisioned automatically once pgvector is in place.
-- `NEXT_PUBLIC_*` env vars must be passed as Docker **build args** to the web service —
-  Next.js inlines them at build time, runtime env vars do not reach the browser bundle.
-- After first deploy, run `python -m app.scripts.seed_demo` on the api service to create
-  the demo tenant; copy its UUID into `NEXT_PUBLIC_DEMO_TENANT_ID` on the web service.
+1. Create a free [Neon](https://neon.tech) Postgres project (ships with pgvector).
+2. Deploy the `api` directory to Railway. Set 3 env vars: `DATABASE_URL`,
+   `ANTHROPIC_API_KEY`, `SEARCH_API_KEY`.
+3. Deploy the `web` directory to Railway with `NEXT_PUBLIC_API_BASE_URL` as a build arg.
+
+That's it. Schema bootstrap, demo tenant creation, and the daily/weekly/quarterly
+scheduled jobs all happen automatically inside the api process.
 
 ---
 
@@ -295,7 +290,7 @@ api/
       price_sources.json        price-discovery source registry
       chemical_priors.json      offline per-chemical priors
     scripts/create_all.py       schema provisioner
-    worker.py                   Arq background jobs (daily, weekly, quarterly)
+    scheduler.py                in-process asyncio scheduler (daily/weekly/quarterly jobs)
   ingestion/run.py              Phase 1 runner
   migrations/                   Alembic env + initial revision
   Dockerfile, railway.json, pyproject.toml

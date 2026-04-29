@@ -10,41 +10,19 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
   api:
     build:
       context: ./api
     env_file: .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/procurement
-      REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
       - postgres
-      - redis
     volumes:
       - ./api:/app
-      - ./corpus:/corpus
-
-  worker:
-    build:
-      context: .
-      dockerfile: worker/Dockerfile
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/procurement
-      REDIS_URL: redis://redis:6379/0
-    depends_on:
-      - postgres
-      - redis
-    volumes:
-      - ./api:/app
-      - ./corpus:/corpus
+      - .:/corpus:ro
 
   web:
     build:

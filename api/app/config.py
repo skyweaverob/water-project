@@ -6,7 +6,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql://postgres:postgres@localhost:5432/procurement"
-    redis_url: str = "redis://localhost:6379/0"
 
     anthropic_api_key: str = ""
     # Use the latest Claude 4.X aliases. Anthropic accepts both alias and pinned-version forms.

@@ -1,29 +1,29 @@
-"""Arq worker for background jobs.
+"""In-process scheduler.
 
-- daily_risk_refresh: scans the live web for disruption events on every chemical in any
-  tenant's portfolio, persists DisruptionEvents, raises RiskAlerts when severity warrants,
-  and rolls a daily portfolio risk score per facility.
-- weekly_price_refresh: runs the PriceDiscovery agent on each portfolio chemical, stores
-  the median benchmark in chemical-level metadata so the Bid Evaluator picks it up.
-- quarterly_board_report: assembles a board-ready PDF rollup per tenant.
+Runs the same jobs the Arq worker used to run, but as asyncio tasks inside the api
+process. Eliminates the need for a separate worker service AND the Redis dependency
+without losing functionality.
 
-These jobs collectively consume the user's search-API credits — the platform earns its
-keep by spending the budget on monitoring rather than ad-hoc lookups.
+Schedule:
+- daily_risk_refresh   — every 24 h, first fire at the next 02:00 UTC
+- weekly_price_refresh — every 7 d,  first fire at the next Monday 03:00 UTC
+- quarterly_board_report — every Q1/Q2/Q3/Q4 boundary, first fire at the next Jan/Apr/Jul/Oct 1, 03:00 UTC
+
+If the api restarts mid-day the schedule realigns automatically; jobs are idempotent so
+repeated firings are safe.
 """
 from __future__ import annotations
 
+import asyncio
 import json
-from datetime import date, datetime, timezone
+import logging
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from arq import cron
-from arq.connections import RedisSettings
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.disruption_monitor import scan_chemical
 from app.agents.price_discovery import discover_price
-from app.config import get_settings
 from app.db import SessionLocal
 from app.models import (
     Chemical,
@@ -35,13 +35,12 @@ from app.models import (
     Tenant,
 )
 
-_settings = get_settings()
+log = logging.getLogger(__name__)
+
 PRIORS = json.loads(
     (Path(__file__).parent / "intelligence" / "chemical_priors.json").read_text(encoding="utf-8")
 )
 
-
-# Static base scores by EPA composite band; daily news adds delta.
 BAND_BASE: dict[str, float] = {
     "Low": 20,
     "Moderate-Low": 35,
@@ -64,7 +63,31 @@ def _band_for(score: float) -> str:
     return "High"
 
 
-async def _portfolio_chemicals(session: AsyncSession, tenant_id) -> list[Chemical]:
+def _seconds_until(target_hour: int, target_minute: int, *, weekday: int | None = None, month_day: int | None = None, valid_months: set[int] | None = None) -> float:
+    """Return seconds from now until the next occurrence of the target time.
+
+    weekday: 0=Monday .. 6=Sunday. None = daily.
+    month_day + valid_months: for the quarterly job (first day of Jan/Apr/Jul/Oct).
+    """
+    now = datetime.now(tz=timezone.utc)
+    candidate = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+    if candidate <= now:
+        candidate += timedelta(days=1)
+
+    if weekday is not None:
+        # Advance until the candidate falls on the requested weekday.
+        while candidate.weekday() != weekday:
+            candidate += timedelta(days=1)
+
+    if month_day is not None and valid_months is not None:
+        # Advance day-by-day until we land on month_day in one of valid_months.
+        while not (candidate.day == month_day and candidate.month in valid_months):
+            candidate += timedelta(days=1)
+
+    return max(60.0, (candidate - now).total_seconds())
+
+
+async def _portfolio_chemicals(session, tenant_id) -> list[Chemical]:
     rows = await session.execute(
         select(Chemical)
         .join(PortfolioChemical, PortfolioChemical.chemical_id == Chemical.id)
@@ -75,9 +98,9 @@ async def _portfolio_chemicals(session: AsyncSession, tenant_id) -> list[Chemica
     return list(rows.scalars().all())
 
 
-async def daily_risk_refresh(ctx: dict) -> dict:
+async def daily_risk_refresh() -> dict:
     today = date.today()
-    summary = {"tenants": 0, "alerts_raised": 0, "events_logged": 0}
+    summary = {"tenants": 0, "alerts_raised": 0, "events_logged": 0, "errors": []}
 
     async with SessionLocal() as session:
         tenants = (await session.execute(select(Tenant))).scalars().all()
@@ -91,13 +114,10 @@ async def daily_risk_refresh(ctx: dict) -> dict:
                     (p for p in PRIORS["chemicals"] if p["name"].lower() == chem.name.lower()), {}
                 )
                 base = BAND_BASE.get(prior.get("risk", "Low"), 30.0)
-
-                # Live web scan for disruption signals — isolated so one bad chemical
-                # doesn't tank the whole nightly run.
                 try:
                     scan = await scan_chemical(chem.name, family=prior.get("family"))
                 except Exception as exc:  # noqa: BLE001
-                    summary.setdefault("errors", []).append(f"{chem.name}: {exc}")
+                    summary["errors"].append(f"{chem.name}: {exc}")
                     chem_score[chem.name] = base
                     continue
 
@@ -114,7 +134,6 @@ async def daily_risk_refresh(ctx: dict) -> dict:
                         )
                     )
                     summary["events_logged"] += 1
-
                     if ev.severity in ("watch", "warning"):
                         session.add(
                             RiskAlert(
@@ -132,12 +151,10 @@ async def daily_risk_refresh(ctx: dict) -> dict:
                         summary["alerts_raised"] += 1
 
                 chem_score[chem.name] = min(100.0, base + delta)
-
-                # Persist per-chemical score for tenant-level rollup
                 session.add(
                     RiskScore(
                         tenant_id=tenant.id,
-                        facility_id=None,  # tenant-level
+                        facility_id=None,
                         chemical_id=chem.id,
                         score_date=today,
                         composite_score=chem_score[chem.name],
@@ -146,7 +163,6 @@ async def daily_risk_refresh(ctx: dict) -> dict:
                     )
                 )
 
-            # Per-facility rollup: average score across that facility's portfolio chemicals
             facilities = (
                 await session.execute(
                     select(FacilityProfile).where(FacilityProfile.tenant_id == tenant.id)
@@ -160,9 +176,7 @@ async def daily_risk_refresh(ctx: dict) -> dict:
                 ).scalars().all()
                 if not portfolio:
                     continue
-                names = [
-                    (await session.get(Chemical, pc.chemical_id)).name for pc in portfolio
-                ]
+                names = [(await session.get(Chemical, pc.chemical_id)).name for pc in portfolio]
                 relevant = [chem_score[n] for n in names if n in chem_score]
                 if not relevant:
                     continue
@@ -183,7 +197,7 @@ async def daily_risk_refresh(ctx: dict) -> dict:
     return summary
 
 
-async def weekly_price_refresh(ctx: dict) -> dict:
+async def weekly_price_refresh() -> dict:
     summary = {"tenants": 0, "chemicals": 0}
     async with SessionLocal() as session:
         tenants = (await session.execute(select(Tenant))).scalars().all()
@@ -192,23 +206,63 @@ async def weekly_price_refresh(ctx: dict) -> dict:
             chems = await _portfolio_chemicals(session, tenant.id)
             for chem in chems:
                 summary["chemicals"] += 1
-                # Just running the agent ensures the search cache is warm for the UI.
-                await discover_price(chem.name, cas_number=chem.cas_number)
+                try:
+                    await discover_price(chem.name, cas_number=chem.cas_number)
+                except Exception:  # noqa: BLE001
+                    pass
     return summary
 
 
-async def quarterly_board_report(ctx: dict) -> dict:
+async def quarterly_board_report() -> dict:
     return {"ran": datetime.now(timezone.utc).isoformat(), "status": "stub"}
 
 
-class WorkerSettings:
-    # Arq reads REDIS_URL via RedisSettings.from_dsn — works with railway.app's REDIS_URL.
-    redis_settings = RedisSettings.from_dsn(_settings.redis_url)
+async def _loop(name: str, fn, *, interval_sec: float, initial_delay: float):
+    """Generic recurring runner with bounded error handling."""
+    log.info("scheduler: %s scheduled in %.0fs (then every %.0fs)", name, initial_delay, interval_sec)
+    await asyncio.sleep(initial_delay)
+    while True:
+        try:
+            log.info("scheduler: running %s", name)
+            result = await fn()
+            log.info("scheduler: %s done: %s", name, result)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            log.exception("scheduler: %s failed: %s", name, exc)
+        await asyncio.sleep(interval_sec)
 
-    cron_jobs = [
-        cron(daily_risk_refresh, hour={2}, minute={0}),
-        cron(weekly_price_refresh, weekday="mon", hour={3}, minute={0}),
-        # arq's parameter is `month_day`, not `day`. `month` is a set of months 1-12.
-        cron(quarterly_board_report, month={1, 4, 7, 10}, month_day={1}, hour={3}, minute={0}),
+
+async def start(stop_event: asyncio.Event) -> None:
+    """Launch the three scheduled jobs as concurrent asyncio tasks. Returns when
+    stop_event is set (FastAPI lifespan teardown)."""
+    tasks = [
+        asyncio.create_task(
+            _loop(
+                "daily_risk_refresh",
+                daily_risk_refresh,
+                interval_sec=24 * 3600,
+                initial_delay=_seconds_until(2, 0),
+            )
+        ),
+        asyncio.create_task(
+            _loop(
+                "weekly_price_refresh",
+                weekly_price_refresh,
+                interval_sec=7 * 24 * 3600,
+                initial_delay=_seconds_until(3, 0, weekday=0),
+            )
+        ),
+        asyncio.create_task(
+            _loop(
+                "quarterly_board_report",
+                quarterly_board_report,
+                interval_sec=90 * 24 * 3600,
+                initial_delay=_seconds_until(3, 0, month_day=1, valid_months={1, 4, 7, 10}),
+            )
+        ),
     ]
-    functions = [daily_risk_refresh, weekly_price_refresh, quarterly_board_report]
+    await stop_event.wait()
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
