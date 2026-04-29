@@ -21,9 +21,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS: comma-separated exact origins via CORS_ORIGINS, plus a regex for *.up.railway.app
+# preview URLs so the frontend service can call the API across deploy environments.
+_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
+    allow_origins=_origins,
+    allow_origin_regex=r"https://.*\.up\.railway\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

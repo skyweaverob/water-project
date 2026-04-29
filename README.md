@@ -201,24 +201,16 @@ report-template IDs.
 
 ## Deploying to Railway
 
-1. Create a new Railway project. Add five services:
-   - `postgres` — provision the official Postgres template, then run
-     `CREATE EXTENSION vector;` in a one-off migration (see `app/scripts/create_all.py`).
-   - `redis` — provision the official Redis template.
-   - `api` — link `./api`. Railway picks up `api/Dockerfile` and `api/railway.json`.
-   - `worker` — link the repo root with `worker.Dockerfile` (built command runs Arq).
-   - `web` — link `./web`. Railway picks up `web/Dockerfile` and `web/railway.json`.
+See [RAILWAY.md](RAILWAY.md) for the full step-by-step. Critical points:
 
-2. Configure environment variables on each service. The required set lives in `.env.example`.
-   At minimum: `DATABASE_URL`, `REDIS_URL`, `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY`,
-   `CLERK_SECRET_KEY`, `STRIPE_SECRET_KEY`, `SEARCH_PROVIDER`, `SEARCH_API_KEY`.
-
-3. Deploy. The API exposes `/healthz` for the Railway healthcheck.
-
-4. Run `python -m app.scripts.create_all` once on the API service to provision the schema.
-
-5. Mount the EPA corpus PDFs into the API/worker file system (Railway volume) or into a
-   bucket and run `python -m ingestion.run` to ingest.
+- Use the `pgvector/pgvector:pg16` Docker image for Postgres — Railway's stock Postgres
+  template doesn't include the `vector` extension binary.
+- The api service's entrypoint runs `python -m app.scripts.create_all` on every boot, so
+  the schema is provisioned automatically once pgvector is in place.
+- `NEXT_PUBLIC_*` env vars must be passed as Docker **build args** to the web service —
+  Next.js inlines them at build time, runtime env vars do not reach the browser bundle.
+- After first deploy, run `python -m app.scripts.seed_demo` on the api service to create
+  the demo tenant; copy its UUID into `NEXT_PUBLIC_DEMO_TENANT_ID` on the web service.
 
 ---
 

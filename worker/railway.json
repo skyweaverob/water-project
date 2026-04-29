@@ -2,12 +2,10 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile"
+    "dockerfilePath": "worker/Dockerfile"
   },
   "deploy": {
-    "startCommand": "./entrypoint.sh",
-    "healthcheckPath": "/healthz",
-    "healthcheckTimeout": 30,
+    "startCommand": "arq app.worker.WorkerSettings",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5
   }
